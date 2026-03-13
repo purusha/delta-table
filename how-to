@@ -1,0 +1,38 @@
+Problema di compatibilità tra Java 21 e Spark 3.5.0 — il modulo system di Java 21 non espone più sun.nio.ch.
+Si risolve passando i flag --add-opens alla JVM:
+$> java \
+  --add-opens java.base/sun.nio.ch=ALL-UNNAMED \
+  --add-opens java.base/java.nio=ALL-UNNAMED \
+  --add-opens java.base/java.lang=ALL-UNNAMED \
+  --add-opens java.base/java.util=ALL-UNNAMED \
+  -jar target/delta-lake-demo-1.0-SNAPSHOT.jar
+
+Spark 3.5 è stato scritto per Java 8/11, quando sun.nio.ch era accessibile liberamente.
+Da Java 17 in poi il sistema a moduli di Java (JPMS) blocca l'accesso a queste classi interne.
+I flag --add-opens riaprono esplicitamente quei moduli, dicendo a Java "lascia passare anche codice non modularizzato (ALL-UNNAMED)".
+È una soluzione ufficiale e stabile, non un hack.
+
+
+Possono anche essere passati nel momento in cui si crea la sparkSession:
+SparkSession spark = SparkSession.builder()
+    .appName("NegozioDemo")
+    .master("local[*]")
+    // Abilita la sintassi SQL di Delta Lake
+    .config("spark.sql.extensions",
+            "io.delta.sql.DeltaSparkSessionExtension")
+    // Registra il catalogo Delta (necessario per usare DeltaTable.forPath ecc.)
+    .config("spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+    // Flag necessari per Java 17+ (Spark usa reflection su moduli interni)
+    .config("spark.driver.extraJavaOptions", "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED")
+    .getOrCreate();
+
+------------------------------------------------------------------------------
+installare parquet-tools come cli tool su linux:
+
+$> sudo apt install pipx
+$> pipx ensurepath
+$> pipx install parquet-tools
+
+------------------------------------------------------------------------------
+
